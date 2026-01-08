@@ -6003,15 +6003,20 @@ SpellCastResult Spell::CheckCast(bool strict)
                 // Check must be executed at the end of  the cast.
                 if (m_executedCurrently && skillId != SKILL_NONE)
                 {
-                    bool canFailAtMax = skillId != SKILL_HERBALISM && skillId != SKILL_MINING;
+                    // JerCore Custom: no fail when gathering (mining/herbalism) if have skill to tap/gather.
+                    if (skillId == SKILL_HERBALISM || skillId == SKILL_MINING)
+                       break; 
 
-                    // chance for failure in orange gather / lockpick (gathering skill can't fail at maxskill)
-                    if ((canFailAtMax || skillValue < sWorld.GetConfigMaxSkillValue()) && reqSkillValue > irand(skillValue - 25, skillValue + 37))
-                    {
+                    // Keeps original behavior for lockpicking, etc
+                    bool canFailAtMax = true;
+
+                    if ((canFailAtMax || skillValue < sWorld.GetConfigMaxSkillValue()) &&
+                        reqSkillValue > irand(skillValue - 25, skillValue + 37))
+                {
                         return SPELL_FAILED_TRY_AGAIN;
-                    }
                 }
-                break;
+            }
+            break;
             }
             case SPELL_EFFECT_SUMMON_DEAD_PET:
             {
