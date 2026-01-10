@@ -3199,6 +3199,19 @@ void Spell::prepare(SpellCastTargets const* targets, Aura* triggeredByAura)
 
     // calculate cast time (calculated after first CheckCast check to prevent charge counting for first CheckCast fail)
     m_casttime = GetSpellCastTime(m_spellInfo, this);
+    // JerCore: Crafting Perks
+    // Requires the custom JerCore CraftingPerks.cpp and CraftingPerks.h or comment out to avoid compiling errors
+    {
+        int32 perkCastTime = int32(m_casttime);
+        JerCore::CraftingPerks::ApplyCastTimePerks(m_caster, m_spellInfo, perkCastTime);
+    
+        if (perkCastTime < 0)
+            perkCastTime = 0;
+
+        m_casttime = uint32(perkCastTime);
+    }
+
+    // Resume original code 
     m_duration = CalculateSpellDuration(m_spellInfo, m_caster);
 
     // set timer base at cast time
