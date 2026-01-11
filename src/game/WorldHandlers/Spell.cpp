@@ -50,6 +50,7 @@
 #include "Chat.h"
 #include "SQLStorages.h"
 #include "DisableMgr.h"
+#include "CraftingPerks.h" //remove or comment out if not using JerCore CraftingPerks script
 #ifdef ENABLE_ELUNA
 #include "LuaEngine.h"
 #endif /* ENABLE_ELUNA */
