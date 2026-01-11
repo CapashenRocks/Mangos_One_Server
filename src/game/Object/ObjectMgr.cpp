@@ -2810,6 +2810,9 @@ void ObjectMgr::LoadPlayerInfo()
             float  positionZ     = fields[6].GetFloat();
             float  orientation   = fields[7].GetFloat();
 
+
+
+
             ChrRacesEntry const* rEntry = sChrRacesStore.LookupEntry(current_race);
             if (!rEntry || !((1 << (current_race - 1)) & RACEMASK_ALL_PLAYABLE))
             {
@@ -2863,7 +2866,16 @@ void ObjectMgr::LoadPlayerInfo()
     // Load playercreate items
     {
         //                                                0     1      2       3
-        QueryResult* result = WorldDatabase.Query("SELECT `race`, `class`, `itemid`, `amount` FROM `playercreateinfo_item`");
+		// JerCore: Modified ORDER BY to load wildcard entries first
+        QueryResult* result = WorldDatabase.Query(
+            "SELECT `race`, `class`, `itemid`, `amount` "
+            "FROM `playercreateinfo_item` "
+            "ORDER BY CASE "
+            "  WHEN `race`=0 AND `class`=0 THEN 0 "
+            "  WHEN `race`=0 OR  `class`=0 THEN 1 "
+            "  ELSE 2 "
+            "END, `race`, `class`"
+        );
 
         uint32 count = 0;
 
@@ -2882,47 +2894,110 @@ void ObjectMgr::LoadPlayerInfo()
 
             do
             {
+				// JerCore: Update wildcard support in playercreateinfo_item table for all race/class combinations
                 Field* fields = result->Fetch();
 
                 uint32 current_race = fields[0].GetUInt32();
                 uint32 current_class = fields[1].GetUInt32();
 
-                ChrRacesEntry const* rEntry = sChrRacesStore.LookupEntry(current_race);
-                if (!rEntry || !((1 << (current_race - 1)) & RACEMASK_ALL_PLAYABLE))
-                {
-                    sLog.outErrorDb("Wrong race %u in `playercreateinfo_item` table, ignoring.", current_race);
-                    continue;
-                }
-
-                ChrClassesEntry const* cEntry = sChrClassesStore.LookupEntry(current_class);
-                if (!cEntry || !((1 << (current_class - 1)) & CLASSMASK_ALL_PLAYABLE))
-                {
-                    sLog.outErrorDb("Wrong class %u in `playercreateinfo_item` table, ignoring.", current_class);
-                    continue;
-                }
-
-                PlayerInfo* pInfo = &playerInfo[current_race][current_class];
-
                 uint32 item_id = fields[2].GetUInt32();
-
                 if (!GetItemPrototype(item_id))
                 {
-                    sLog.outErrorDb("Item id %u (race %u class %u) in `playercreateinfo_item` table but not listed in `item_template`, ignoring.", item_id, current_race, current_class);
+                    sLog.outErrorDb("Item id %u (race %u class %u) in `playercreateinfo_item` table but not listed in `item_template`, ignoring.",
+                        item_id, current_race, current_class);
                     continue;
                 }
 
-                uint32 amount  = fields[3].GetUInt32();
-
+                uint32 amount = fields[3].GetUInt32();
                 if (!amount)
                 {
-                    sLog.outErrorDb("Item id %u (class %u race %u) have amount==0 in `playercreateinfo_item` table, ignoring.", item_id, current_race, current_class);
+                    sLog.outErrorDb("Item id %u (class %u race %u) have amount==0 in `playercreateinfo_item` table, ignoring.",
+                        item_id, current_class, current_race);
                     continue;
                 }
 
-                pInfo->item.push_back(PlayerCreateInfoItem(item_id, amount));
+                auto IsPlayableRace = [](uint32 r) -> bool
+                    {
+                        return r > 0
+                            && sChrRacesStore.LookupEntry(r)
+                            && ((1 << (r - 1)) & RACEMASK_ALL_PLAYABLE);
+                    };
+
+                auto IsPlayableClass = [](uint32 c) -> bool
+                    {
+                        return c > 0
+                            && sChrClassesStore.LookupEntry(c)
+                            && ((1 << (c - 1)) & CLASSMASK_ALL_PLAYABLE);
+                    };
+
+                // add-or-replace so that later (more specific) rows override earlier wildcard rows
+                auto AddOrReplace = [&](uint32 r, uint32 c)
+                    {
+                        if (!IsPlayableRace(r) || !IsPlayableClass(c))
+                            return;
+
+                        PlayerInfo* pInfo = &playerInfo[r][c];
+
+                        // Replace if already present (prevents duplicate from wildcard + specific)
+                        for (auto& it : pInfo->item)
+                        {
+                            if (it.item_id == item_id)
+                            {
+                                it = PlayerCreateInfoItem(item_id, amount); // override by replacing the whole entry
+                                return;
+                            }
+                        }
+
+                        pInfo->item.push_back(PlayerCreateInfoItem(item_id, amount));
+                        ++count; // count actual effective entries added
+                    };
+
+                if (current_race == 0 && current_class == 0)
+                {
+                    for (uint32 r = 1; r < MAX_RACES; ++r)
+                        for (uint32 c = 1; c < MAX_CLASSES; ++c)
+                            AddOrReplace(r, c);
+                }
+                else if (current_race == 0)
+                {
+                    if (!IsPlayableClass(current_class))
+                    {
+                        sLog.outErrorDb("Wrong class %u in `playercreateinfo_item` table, ignoring.", current_class);
+                        continue;
+                    }
+
+                    for (uint32 r = 1; r < MAX_RACES; ++r)
+                        AddOrReplace(r, current_class);
+                }
+                else if (current_class == 0)
+                {
+                    if (!IsPlayableRace(current_race))
+                    {
+                        sLog.outErrorDb("Wrong race %u in `playercreateinfo_item` table, ignoring.", current_race);
+                        continue;
+                    }
+
+                    for (uint32 c = 1; c < MAX_CLASSES; ++c)
+                        AddOrReplace(current_race, c);
+                }
+                else
+                {
+                    if (!IsPlayableRace(current_race))
+                    {
+                        sLog.outErrorDb("Wrong race %u in `playercreateinfo_item` table, ignoring.", current_race);
+                        continue;
+                    }
+
+                    if (!IsPlayableClass(current_class))
+                    {
+                        sLog.outErrorDb("Wrong class %u in `playercreateinfo_item` table, ignoring.", current_class);
+                        continue;
+                    }
+
+                    AddOrReplace(current_race, current_class);
+                }
 
                 bar.step();
-                ++count;
             }
             while (result->NextRow());
 
