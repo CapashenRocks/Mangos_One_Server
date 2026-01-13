@@ -192,7 +192,7 @@ void AuctionHouseMgr::SendAuctionWonMail(AuctionEntry* auction)
         delete pItem;
     }
 }
-
+/* Remove Pending Mail, keep original funtion commented out
 void AuctionHouseMgr::SendAuctionSalePendingMail(AuctionEntry* auction)
 {
     ObjectGuid owner_guid = ObjectGuid(HIGHGUID_PLAYER, auction->owner);
@@ -220,6 +220,12 @@ void AuctionHouseMgr::SendAuctionSalePendingMail(AuctionEntry* auction)
         MailDraft(msgAuctionSalePendingSubject.str(), msgAuctionSalePendingBody.str())
         .SendMailTo(MailReceiver(owner, owner_guid), auction, MAIL_CHECK_MASK_COPIED);
     }
+}
+*/
+
+void AuctionHouseMgr::SendAuctionSalePendingMail(AuctionEntry* /*auction*/)
+{
+    // JerCore: disabled pending sale mail
 }
 
 // call this method to send mail to auction owner, when auction is successful, it does not clear ram
@@ -258,9 +264,10 @@ void AuctionHouseMgr::SendAuctionSuccessfulMail(AuctionEntry* auction)
             owner->GetSession()->SendAuctionOwnerNotification(auction, true);
         }
 
+        // JerCore: Hardcoded successful auction to send in 5 minutes
         MailDraft(msgAuctionSuccessfulSubject.str(), auctionSuccessfulBody.str())
         .SetMoney(profit)
-        .SendMailTo(MailReceiver(owner, owner_guid), auction, MAIL_CHECK_MASK_COPIED, HOUR);
+        .SendMailTo(MailReceiver(owner, owner_guid), auction, MAIL_CHECK_MASK_COPIED, 5* MINUTE);
     }
 }
 
