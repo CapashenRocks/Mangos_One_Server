@@ -3044,7 +3044,8 @@ void ObjectMgr::LoadPlayerInfo()
                 uint32 current_class = fields[1].GetUInt32();
                 uint32 spell_id = fields[2].GetUInt32();
 
-                if (!sSpellTemplate.LookupEntry<SpellEntry>(spell_id)) 
+                SpellEntry const* spellInfo = sSpellStore.LookupEntry(spell_id);
+                if (!spellInfo)
                 {
                     sLog.outErrorDb("Spell id %u (race %u class %u) in `playercreateinfo_spell` table but not listed in DBC, ignoring.",
                         spell_id, current_race, current_class);
