@@ -435,41 +435,40 @@ AuctionBotConfig::AuctionBotConfig()
  */
 bool AuctionBotConfig::Initialize()
 {
-    if (!m_AhBotCfg.SetSource(m_configFileName.c_str()))
-    {
-        sLog.outString("AHBOT is Disabled. Unable to open configuration file %s. ", m_configFileName.c_str());
-        setConfig(CONFIG_UINT32_AHBOT_ALLIANCE_ITEM_AMOUNT_RATIO, 0);
-        setConfig(CONFIG_UINT32_AHBOT_HORDE_ITEM_AMOUNT_RATIO, 0);
-        setConfig(CONFIG_UINT32_AHBOT_NEUTRAL_ITEM_AMOUNT_RATIO, 0);
-        return false;
-    }
-    else
-    {
-        sLog.outString("AHBot using configuration file %s", m_configFileName.c_str());
-    }
-
+    // We no longer load a separate ahbot.conf.
+    // Assumes mangosd.conf was already loaded into sConfig earlier during server startup.
+    // All AHBot keys are now read from sConfig inside GetConfigFromFile().
     GetConfigFromFile();
 
     if (!getConfig(CONFIG_BOOL_AHBOT_BUYER_ENABLED) && !getConfig(CONFIG_BOOL_AHBOT_SELLER_ENABLED))
     {
-        sLog.outString("AHBOT is Disabled. (If you want to use it please set config in 'ahbot.conf')");
+        sLog.outString("AHBOT is Disabled. (Enable it in mangosd.conf)");
         return false;
     }
 
-    if ((getConfig(CONFIG_UINT32_AHBOT_ALLIANCE_ITEM_AMOUNT_RATIO) == 0) && (getConfig(CONFIG_UINT32_AHBOT_HORDE_ITEM_AMOUNT_RATIO) == 0) && (getConfig(CONFIG_UINT32_AHBOT_NEUTRAL_ITEM_AMOUNT_RATIO) == 0) &&
-        !getConfig(CONFIG_BOOL_AHBOT_BUYER_ALLIANCE_ENABLED) && !getConfig(CONFIG_BOOL_AHBOT_BUYER_HORDE_ENABLED) && !getConfig(CONFIG_BOOL_AHBOT_BUYER_NEUTRAL_ENABLED))
+    if ((getConfig(CONFIG_UINT32_AHBOT_ALLIANCE_ITEM_AMOUNT_RATIO) == 0) &&
+        (getConfig(CONFIG_UINT32_AHBOT_HORDE_ITEM_AMOUNT_RATIO) == 0) &&
+        (getConfig(CONFIG_UINT32_AHBOT_NEUTRAL_ITEM_AMOUNT_RATIO) == 0) &&
+        !getConfig(CONFIG_BOOL_AHBOT_BUYER_ALLIANCE_ENABLED) &&
+        !getConfig(CONFIG_BOOL_AHBOT_BUYER_HORDE_ENABLED) &&
+        !getConfig(CONFIG_BOOL_AHBOT_BUYER_NEUTRAL_ENABLED))
     {
-        sLog.outString("All feature of AuctionHouseBot are disabled! (If you want to use it please set config in 'ahbot.conf')");
+        sLog.outString("All features of AuctionHouseBot are disabled! (Configure in mangosd.conf)");
         return false;
     }
-    if ((getConfig(CONFIG_UINT32_AHBOT_ALLIANCE_ITEM_AMOUNT_RATIO) == 0) && (getConfig(CONFIG_UINT32_AHBOT_HORDE_ITEM_AMOUNT_RATIO) == 0) && (getConfig(CONFIG_UINT32_AHBOT_NEUTRAL_ITEM_AMOUNT_RATIO) == 0))
+
+    if ((getConfig(CONFIG_UINT32_AHBOT_ALLIANCE_ITEM_AMOUNT_RATIO) == 0) &&
+        (getConfig(CONFIG_UINT32_AHBOT_HORDE_ITEM_AMOUNT_RATIO) == 0) &&
+        (getConfig(CONFIG_UINT32_AHBOT_NEUTRAL_ITEM_AMOUNT_RATIO) == 0))
     {
-        sLog.outString("AuctionHouseBot SELLER is disabled! (If you want to use it please set config in 'ahbot.conf')");
+        sLog.outString("AuctionHouseBot SELLER is disabled! (Configure in mangosd.conf)");
     }
 
-    if (!getConfig(CONFIG_BOOL_AHBOT_BUYER_ALLIANCE_ENABLED) && !getConfig(CONFIG_BOOL_AHBOT_BUYER_HORDE_ENABLED) && !getConfig(CONFIG_BOOL_AHBOT_BUYER_NEUTRAL_ENABLED))
+    if (!getConfig(CONFIG_BOOL_AHBOT_BUYER_ALLIANCE_ENABLED) &&
+        !getConfig(CONFIG_BOOL_AHBOT_BUYER_HORDE_ENABLED) &&
+        !getConfig(CONFIG_BOOL_AHBOT_BUYER_NEUTRAL_ENABLED))
     {
-        sLog.outString("AuctionHouseBot BUYER is disabled! (If you want to use it please set config in 'ahbot.conf')");
+        sLog.outString("AuctionHouseBot BUYER is disabled! (Configure in mangosd.conf)");
     }
 
     m_ItemsPerCycleBoost = getConfig(CONFIG_UINT32_AHBOT_ITEMS_PER_CYCLE_BOOST);
@@ -477,6 +476,7 @@ bool AuctionBotConfig::Initialize()
 
     return true;
 }
+
 
 /**
  * @brief Sets the AH Bot ID based on the character name.
@@ -505,7 +505,7 @@ void AuctionBotConfig::SetAHBotId(const std::string& BotCharName)
  */
 void AuctionBotConfig::setConfig(AuctionBotConfigUInt32Values index, char const* fieldname, uint32 defvalue)
 {
-    setConfig(index, m_AhBotCfg.GetIntDefault(fieldname, defvalue));
+    setConfig(index, sConfig.GetIntDefault(fieldname, defvalue));
     if (int32(getConfig(index)) < 0)
     {
         sLog.outError("AHBot: %s (%i) can't be negative. Using %u instead.", fieldname, int32(getConfig(index)), defvalue);
@@ -523,7 +523,7 @@ void AuctionBotConfig::setConfig(AuctionBotConfigUInt32Values index, char const*
  */
 void AuctionBotConfig::setConfigMax(AuctionBotConfigUInt32Values index, char const* fieldname, uint32 defvalue, uint32 maxvalue)
 {
-    setConfig(index, m_AhBotCfg.GetIntDefault(fieldname, defvalue));
+    setConfig(index, sConfig.GetIntDefault(fieldname, defvalue));
     if (getConfig(index) > maxvalue)
     {
         sLog.outError("AHBot: %s (%u) must be in range 0...%u. Using %u instead.", fieldname, getConfig(index), maxvalue, maxvalue);
@@ -542,7 +542,7 @@ void AuctionBotConfig::setConfigMax(AuctionBotConfigUInt32Values index, char con
  */
 void AuctionBotConfig::setConfigMinMax(AuctionBotConfigUInt32Values index, char const* fieldname, uint32 defvalue, uint32 minvalue, uint32 maxvalue)
 {
-    setConfig(index, m_AhBotCfg.GetIntDefault(fieldname, defvalue));
+    setConfig(index, sConfig.GetIntDefault(fieldname, defvalue));
     if (getConfig(index) > maxvalue)
     {
         sLog.outError("AHBot: %s (%u) must be in range %u...%u. Using %u instead.", fieldname, getConfig(index), minvalue, maxvalue, maxvalue);
@@ -564,7 +564,7 @@ void AuctionBotConfig::setConfigMinMax(AuctionBotConfigUInt32Values index, char 
  */
 void AuctionBotConfig::setConfig(AuctionBotConfigBoolValues index, char const* fieldname, bool defvalue)
 {
-    setConfig(index, m_AhBotCfg.GetBoolDefault(fieldname, defvalue));
+    setConfig(index, sConfig.GetBoolDefault(fieldname, defvalue));
 }
 
 /**
@@ -573,7 +573,8 @@ void AuctionBotConfig::setConfig(AuctionBotConfigBoolValues index, char const* f
 void AuctionBotConfig::GetConfigFromFile()
 {
     // Check config file version
-    if (m_AhBotCfg.GetIntDefault("ConfVersion", 0) != AHBOT_CONFIG_VERSION)
+    if (sConfig.GetIntDefault("AhbotConf.ConfVersion", 0) != AHBOT_CONFIG_VERSION)
+
     {
         sLog.outError("AHBot: Configuration file version doesn't match expected version. Some config variables may be wrong or missing.");
     }
@@ -582,9 +583,9 @@ void AuctionBotConfig::GetConfigFromFile()
     setConfigMax(CONFIG_UINT32_AHBOT_HORDE_ITEM_AMOUNT_RATIO    , "AuctionHouseBot.Horde.Items.Amount.Ratio"    , 100, 10000);
     setConfigMax(CONFIG_UINT32_AHBOT_NEUTRAL_ITEM_AMOUNT_RATIO  , "AuctionHouseBot.Neutral.Items.Amount.Ratio"  , 100, 10000);
 
-    SetAHBotIncludes(m_AhBotCfg.GetStringDefault("AuctionHouseBot.forceIncludeItems", ""));
-    SetAHBotExcludes(m_AhBotCfg.GetStringDefault("AuctionHouseBot.forceExcludeItems", ""));
-    SetAHBotId(m_AhBotCfg.GetStringDefault("AuctionHouseBot.CharacterName", ""));
+    SetAHBotIncludes(sConfig.GetStringDefault("AuctionHouseBot.forceIncludeItems", ""));
+    SetAHBotExcludes(sConfig.GetStringDefault("AuctionHouseBot.forceExcludeItems", ""));
+    SetAHBotId(sConfig.GetStringDefault("AuctionHouseBot.CharacterName", ""));
 
     setConfig(CONFIG_BOOL_AHBOT_BUYER_ALLIANCE_ENABLED       , "AuctionHouseBot.Buyer.Alliance.Enabled"      , false);
     setConfig(CONFIG_BOOL_AHBOT_BUYER_HORDE_ENABLED          , "AuctionHouseBot.Buyer.Horde.Enabled"         , false);
@@ -671,7 +672,7 @@ void AuctionBotConfig::GetConfigFromFile()
  */
 bool AuctionBotConfig::Reload()
 {
-    if (m_AhBotCfg.Reload())
+    if (sConfig.Reload())
     {
         GetConfigFromFile();
         return true;
