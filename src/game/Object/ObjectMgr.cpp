@@ -3027,26 +3027,13 @@ void ObjectMgr::LoadPlayerInfo()
         {
             BarGoLink bar(result->GetRowCount());
 
+            // JerCore: Allow wildcard in playercreateinfo_spell table
             do
             {
                 Field* fields = result->Fetch();
 
-                uint32 current_race = fields[0].GetUInt32();
-                uint32 current_class = fields[1].GetUInt32();
-
-                ChrRacesEntry const* rEntry = sChrRacesStore.LookupEntry(current_race);
-                if (!rEntry || !((1 << (current_race - 1)) & RACEMASK_ALL_PLAYABLE))
-                {
-                    sLog.outErrorDb("Wrong race %u in `playercreateinfo_spell` table, ignoring.", current_race);
-                    continue;
-                }
-
-                ChrClassesEntry const* cEntry = sChrClassesStore.LookupEntry(current_class);
-                if (!cEntry || !((1 << (current_class - 1)) & CLASSMASK_ALL_PLAYABLE))
-                {
-                    sLog.outErrorDb("Wrong class %u in `playercreateinfo_spell` table, ignoring.", current_class);
-                    continue;
-                }
+                uint32 db_race = fields[0].GetUInt32();
+                uint32 db_class = fields[1].GetUInt32();
 
                 uint32 spell_id = fields[2].GetUInt32();
                 if (!sSpellStore.LookupEntry(spell_id))
@@ -3055,20 +3042,48 @@ void ObjectMgr::LoadPlayerInfo()
                     continue;
                 }
 
-                PlayerInfo* pInfo = &playerInfo[current_race][current_class];
-                pInfo->spell.push_back(spell_id);
+                auto IsPlayableRace = [](uint32 r) -> bool
+                    {
+                        ChrRacesEntry const* rEntry = sChrRacesStore.LookupEntry(r);
+                        return rEntry && ((1 << (r - 1)) & RACEMASK_ALL_PLAYABLE);
+                    };
 
-                bar.step();
-                ++count;
-            }
-            while (result->NextRow());
+                auto IsPlayableClass = [](uint32 c) -> bool
+                    {
+                        ChrClassesEntry const* cEntry = sChrClassesStore.LookupEntry(c);
+                        return cEntry && ((1 << (c - 1)) & CLASSMASK_ALL_PLAYABLE);
+                    };
 
-            delete result;
+                // Add wildcards:
+                //   db_race  == 0 => all playable races
+                //   db_class == 0 => all playable classes
+                for (uint32 r = 1; r < MAX_RACES; ++r)
+                {
+                    if (db_race != 0 && r != db_race)
+                        continue;
 
-            sLog.outString();
-            sLog.outString(">> Loaded %u player create spells", count);
-        }
-    }
+                    if (!IsPlayableRace(r))
+                        continue;
+
+                    for (uint32 c = 1; c < MAX_CLASSES; ++c)
+                    {
+                        if (db_class != 0 && c != db_class)
+                            continue;
+
+                        if (!IsPlayableClass(c))
+                            continue;
+
+                        PlayerInfo* pInfo = &playerInfo[r][c];
+
+                        if (std::find(pInfo->spell.begin(), pInfo->spell.end(), spell_id) == pInfo->spell.end())
+                            pInfo->spell.push_back(spell_id);
+
+                        bar.step();
+                        ++count;
+                    }
+                }
+            } while (result->NextRow());
+
 
     // Load playercreate actions
     {
