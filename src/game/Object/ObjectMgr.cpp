@@ -52,7 +52,7 @@
 #include "GridNotifiersImpl.h"
 #include "CellImpl.h"
 #include "DisableMgr.h"
-
+#include <algorithm>
 #include "ItemEnchantmentMgr.h"
 #include <limits>
 
@@ -3011,7 +3011,15 @@ void ObjectMgr::LoadPlayerInfo()
     // Load playercreate spells
     {
         //                                                0     1      2
-        QueryResult* result = WorldDatabase.Query("SELECT `race`, `class`, `Spell` FROM `playercreateinfo_spell`");
+		// JerCore: Modified ORDER BY to load wildcard entries first
+        QueryResult* result = WorldDatabase.Query(
+            "SELECT `race`, `class`, `spell` FROM `playercreateinfo_spell` "
+            "ORDER BY CASE "
+            "  WHEN `race`=0 AND `class`=0 THEN 0 "
+            "  WHEN `race`=0 OR  `class`=0 THEN 1 "
+            "  ELSE 2 "
+            "END, `race`, `class`"
+        );
 
         uint32 count = 0;
 
@@ -3032,59 +3040,102 @@ void ObjectMgr::LoadPlayerInfo()
             {
                 Field* fields = result->Fetch();
 
-                uint32 db_race = fields[0].GetUInt32();
-                uint32 db_class = fields[1].GetUInt32();
-
+                uint32 current_race = fields[0].GetUInt32();
+                uint32 current_class = fields[1].GetUInt32();
                 uint32 spell_id = fields[2].GetUInt32();
-                if (!sSpellStore.LookupEntry(spell_id))
+
+                if (!sSpellTemplate.LookupEntry<SpellEntry>(spell_id)) 
                 {
-                    sLog.outErrorDb("Non existing spell %u in `playercreateinfo_spell` table, ignoring.", spell_id);
+                    sLog.outErrorDb("Spell id %u (race %u class %u) in `playercreateinfo_spell` table but not listed in DBC, ignoring.",
+                        spell_id, current_race, current_class);
                     continue;
                 }
 
                 auto IsPlayableRace = [](uint32 r) -> bool
                     {
-                        ChrRacesEntry const* rEntry = sChrRacesStore.LookupEntry(r);
-                        return rEntry && ((1 << (r - 1)) & RACEMASK_ALL_PLAYABLE);
+                        return r > 0
+                            && sChrRacesStore.LookupEntry(r)
+                            && ((1 << (r - 1)) & RACEMASK_ALL_PLAYABLE);
                     };
 
                 auto IsPlayableClass = [](uint32 c) -> bool
                     {
-                        ChrClassesEntry const* cEntry = sChrClassesStore.LookupEntry(c);
-                        return cEntry && ((1 << (c - 1)) & CLASSMASK_ALL_PLAYABLE);
+                        return c > 0
+                            && sChrClassesStore.LookupEntry(c)
+                            && ((1 << (c - 1)) & CLASSMASK_ALL_PLAYABLE);
                     };
 
-                // Add wildcards:
-                //   db_race  == 0 => all playable races
-                //   db_class == 0 => all playable classes
-                for (uint32 r = 1; r < MAX_RACES; ++r)
-                {
-                    if (db_race != 0 && r != db_race)
-                        continue;
-
-                    if (!IsPlayableRace(r))
-                        continue;
-
-                    for (uint32 c = 1; c < MAX_CLASSES; ++c)
+                auto AddSpell = [&](uint32 r, uint32 c)
                     {
-                        if (db_class != 0 && c != db_class)
-                            continue;
-
-                        if (!IsPlayableClass(c))
-                            continue;
+                        if (!IsPlayableRace(r) || !IsPlayableClass(c))
+                            return;
 
                         PlayerInfo* pInfo = &playerInfo[r][c];
 
-                        if (std::find(pInfo->spell.begin(), pInfo->spell.end(), spell_id) == pInfo->spell.end())
-                            pInfo->spell.push_back(spell_id);
+                        for (uint32 s : pInfo->spell)
+                            if (s == spell_id)
+                                return;
 
-                        bar.step();
+                        pInfo->spell.push_back(spell_id);
                         ++count;
-                    }
+                    };
+
+                if (current_race == 0 && current_class == 0)
+                {
+                    for (uint32 r = 1; r < MAX_RACES; ++r)
+                        for (uint32 c = 1; c < MAX_CLASSES; ++c)
+                            AddSpell(r, c);
                 }
-            } while (result->NextRow());
+                else if (current_race == 0)
+                {
+                    if (!IsPlayableClass(current_class))
+                    {
+                        sLog.outErrorDb("Wrong class %u in `playercreateinfo_spell` table, ignoring.", current_class);
+                        continue;
+                    }
 
+                    for (uint32 r = 1; r < MAX_RACES; ++r)
+                        AddSpell(r, current_class);
+                }
+                else if (current_class == 0)
+                {
+                    if (!IsPlayableRace(current_race))
+                    {
+                        sLog.outErrorDb("Wrong race %u in `playercreateinfo_spell` table, ignoring.", current_race);
+                        continue;
+                    }
 
+                    for (uint32 c = 1; c < MAX_CLASSES; ++c)
+                        AddSpell(current_race, c);
+                }
+                else
+                {
+                    if (!IsPlayableRace(current_race))
+                    {
+                        sLog.outErrorDb("Wrong race %u in `playercreateinfo_spell` table, ignoring.", current_race);
+                        continue;
+                    }
+
+                    if (!IsPlayableClass(current_class))
+                    {
+                        sLog.outErrorDb("Wrong class %u in `playercreateinfo_spell` table, ignoring.", current_class);
+                        continue;
+                    }
+
+                    AddSpell(current_race, current_class);
+                }
+
+                bar.step();
+            } 
+            while (result->NextRow());
+
+            delete result;
+
+            sLog.outString();
+            sLog.outString(">> Loaded %u player create spells", count);
+            }
+    }
+        
     // Load playercreate actions
     {
         //                                                0     1      2       3       4
